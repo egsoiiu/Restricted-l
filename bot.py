@@ -1,18 +1,42 @@
+import os
 import re
+import asyncio
+from aiohttp import web
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
 
-# === CONFIG - EDIT THESE ===
-API_ID = 12345678  # From https://my.telegram.org
-API_HASH = "your_api_hash_here"  # From https://my.telegram.org
-BOT_TOKEN = "your_bot_token_here"  # From @BotFather
-# === END CONFIG ===
+# Read from environment variables
+API_ID = int(os.getenv("API_ID", 0))
+API_HASH = os.getenv("API_HASH", "")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+PORT = int(os.getenv("PORT", 8080))
+
+# Validate credentials
+if not all([API_ID, API_HASH, BOT_TOKEN]):
+    raise ValueError("Missing API credentials. Check your environment variables")
 
 app = Client("fast_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # Simple storage
 user_data = {}
+
+# Web server for Render health checks
+async def health_check(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    """Start a simple web server for Render"""
+    web_app = web.Application()
+    web_app.router.add_get('/', health_check)
+    web_app.router.add_get('/health', health_check)
+    
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+    print(f"🌐 Web server running on port {PORT}")
 
 @app.on_message(filters.command("start"))
 async def start(client, message: Message):
@@ -159,5 +183,19 @@ async def handle_link(client, message: Message):
     except Exception as e:
         await message.reply(f"❌ Error: {e}")
 
-print("🚀 Fast File Bot Starting...")
-app.run()
+async def main():
+    """Start both web server and Telegram bot"""
+    print("🚀 Starting Fast File Bot...")
+    
+    # Start web server for Render
+    await start_web_server()
+    
+    # Start Telegram bot
+    await app.start()
+    print("✅ Bot started successfully!")
+    
+    # Keep running
+    await asyncio.Future()
+
+if __name__ == "__main__":
+    asyncio.run(main())
