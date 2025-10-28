@@ -1,3 +1,4 @@
-pyrogram==2.0.106
-tgcrypto==1.2.5
-aiohttp==3.9.1
+telethon==1.28.5
+aiohttp==3.8.5
+python-dotenv==1.0.0
+async-timeout==4.0.2
