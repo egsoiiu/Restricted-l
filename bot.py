@@ -2,8 +2,8 @@ import os
 import re
 import asyncio
 from aiohttp import web
-from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram import Client, filters, idle
+from pyrogram.types import Message
 from pyrogram.enums import ParseMode
 
 # Read from environment variables
@@ -16,7 +16,13 @@ PORT = int(os.getenv("PORT", 8080))
 if not all([API_ID, API_HASH, BOT_TOKEN]):
     raise ValueError("Missing API credentials. Check your environment variables")
 
-app = Client("fast_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client(
+    "fast_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN,
+    sleep_threshold=60
+)
 
 # Simple storage
 user_data = {}
@@ -39,8 +45,8 @@ async def start_web_server():
     print(f"🌐 Web server running on port {PORT}")
 
 @app.on_message(filters.command("start"))
-async def start(client, message: Message):
-    await message.reply(
+async def start_command(client, message: Message):
+    await message.reply_text(
         "🚀 **Fast File Bot**\n\n"
         "I instantly copy files using Telegram's file ID system!\n\n"
         "**Commands:**\n"
@@ -53,19 +59,19 @@ async def start(client, message: Message):
     )
 
 @app.on_message(filters.command("setcaption"))
-async def set_caption(client, message: Message):
+async def set_caption_command(client, message: Message):
     user_id = message.from_user.id
     if len(message.command) > 1:
         caption = ' '.join(message.command[1:])
         if user_id not in user_data:
             user_data[user_id] = {}
         user_data[user_id]['caption'] = caption
-        await message.reply(f"✅ Caption set: `{caption}`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(f"✅ Caption set: `{caption}`", parse_mode=ParseMode.MARKDOWN)
     else:
-        await message.reply("❌ Usage: `/setcaption Your text`")
+        await message.reply_text("❌ Usage: `/setcaption Your text`", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("replace"))
-async def set_replace(client, message: Message):
+async def set_replace_command(client, message: Message):
     user_id = message.from_user.id
     if len(message.command) > 2:
         old, new = message.command[1], message.command[2]
@@ -74,24 +80,24 @@ async def set_replace(client, message: Message):
         if 'replace' not in user_data[user_id]:
             user_data[user_id]['replace'] = {}
         user_data[user_id]['replace'][old] = new
-        await message.reply(f"✅ Replacement: `{old}` → `{new}`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(f"✅ Replacement: `{old}` → `{new}`", parse_mode=ParseMode.MARKDOWN)
     else:
-        await message.reply("❌ Usage: `/replace OLD_WORD NEW_WORD`")
+        await message.reply_text("❌ Usage: `/replace OLD_WORD NEW_WORD`", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("target"))
-async def set_target(client, message: Message):
+async def set_target_command(client, message: Message):
     user_id = message.from_user.id
     if len(message.command) > 1:
         target = message.command[1]
         if user_id not in user_data:
             user_data[user_id] = {}
         user_data[user_id]['target'] = target
-        await message.reply(f"✅ Target: `{target}`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(f"✅ Target: `{target}`", parse_mode=ParseMode.MARKDOWN)
     else:
-        await message.reply("❌ Usage: `/target CHAT_ID` or `/target me`")
+        await message.reply_text("❌ Usage: `/target CHAT_ID` or `/target me`", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("info"))
-async def show_info(client, message: Message):
+async def show_info_command(client, message: Message):
     user_id = message.from_user.id
     user = user_data.get(user_id, {})
     
@@ -100,10 +106,10 @@ async def show_info(client, message: Message):
     replaces = user.get('replace', {})
     
     text = f"**Your Settings:**\n\n**Caption:** `{caption}`\n**Target:** `{target}`\n**Replacements:** {len(replaces)}"
-    await message.reply(text, parse_mode=ParseMode.MARKDOWN)
+    await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.media & filters.private)
-async def handle_media(client, message: Message):
+async def handle_media_message(client, message: Message):
     user_id = message.from_user.id
     user = user_data.get(user_id, {})
     target = user.get('target', user_id)
@@ -130,15 +136,15 @@ async def handle_media(client, message: Message):
         elif message.audio:
             await app.send_audio(target, message.audio.file_id, caption=final or None)
         else:
-            await message.reply("❌ Media type not supported")
+            await message.reply_text("❌ Media type not supported")
             return
         
-        await message.reply("✅ File sent!")
+        await message.reply_text("✅ File sent!")
     except Exception as e:
-        await message.reply(f"❌ Error: {e}")
+        await message.reply_text(f"❌ Error: {e}")
 
 @app.on_message(filters.regex(r'https?://t\.me/\w+/\d+') & filters.private)
-async def handle_link(client, message: Message):
+async def handle_link_message(client, message: Message):
     user_id = message.from_user.id
     link = message.text
     
@@ -146,11 +152,11 @@ async def handle_link(client, message: Message):
         parts = link.split('/')
         chat, msg_id = parts[-2], int(parts[-1])
         
-        status = await message.reply("🔗 Processing...")
+        status = await message.reply_text("🔗 Processing...")
         source_msg = await app.get_messages(chat, msg_id)
         
         if not source_msg or not source_msg.media:
-            await status.edit("❌ No media found")
+            await status.edit_text("❌ No media found")
             return
         
         # Forward the media using file ID
@@ -175,13 +181,27 @@ async def handle_link(client, message: Message):
         elif source_msg.audio:
             await app.send_audio(target, source_msg.audio.file_id, caption=final or None)
         else:
-            await status.edit("❌ Media type not supported")
+            await status.edit_text("❌ Media type not supported")
             return
         
-        await status.edit("✅ File copied!")
+        await status.edit_text("✅ File copied!")
         
     except Exception as e:
-        await message.reply(f"❌ Error: {e}")
+        await message.reply_text(f"❌ Error: {e}")
+
+# Handle all text messages to catch any issues
+@app.on_message(filters.text & filters.private)
+async def handle_all_text(client, message: Message):
+    # If it's not a command and not a Telegram link, show help
+    if not message.text.startswith('/') and not re.match(r'https?://t\.me/\w+/\d+', message.text):
+        await message.reply_text(
+            "🤔 **How to use:**\n\n"
+            "1. **Forward any media file** to me\n"
+            "2. **Send a public channel link:**\n"
+            "   `https://t.me/channel/123`\n\n"
+            "Use `/start` for full instructions",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 async def main():
     """Start both web server and Telegram bot"""
@@ -194,8 +214,12 @@ async def main():
     await app.start()
     print("✅ Bot started successfully!")
     
-    # Keep running
-    await asyncio.Future()
+    # Keep the bot running
+    print("🤖 Bot is now active and listening...")
+    await idle()
+    
+    # Stop the bot when needed
+    await app.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())
