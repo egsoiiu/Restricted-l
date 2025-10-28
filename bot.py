@@ -260,16 +260,16 @@ The bot will forward all media files between the first and last URLs to the spec
 
     async def run(self):
         """Run the bot"""
-        if not await bot.initialize():
+        if not await self.initialize():
             return
 
         # Setup message handlers
-        await bot.handle_telegram_messages()
+        await self.handle_telegram_messages()
 
         logging.info("🤖 Bot is now running! Send /start to see commands.")
 
         try:
-            await bot.client.run_until_disconnected()
+            await self.client.run_until_disconnected()
         except KeyboardInterrupt:
             logging.info("🛑 Received interrupt signal")
 
@@ -279,18 +279,10 @@ The bot will forward all media files between the first and last URLs to the spec
             await self.client.disconnect()
         logging.info("🔚 Bot shutdown completed")
 
-# Global bot instance
-bot = TelegramForwardBot()
-
 async def main():
+    bot = TelegramForwardBot()
     try:
-        if not await bot.initialize():
-            return
-
-        await bot.handle_telegram_messages()
-        logging.info("🤖 Bot is now running! Send /start to see commands.")
-        await bot.client.run_until_disconnected()
-        
+        await bot.run()
     except Exception as e:
         logging.error(f"❌ Fatal error: {e}")
     finally:
