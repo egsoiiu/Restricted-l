@@ -1,11 +1,12 @@
 import os
 import re
 import asyncio
-from aiohttp import web
+import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 from pyrogram import Client, filters, idle
 from pyrogram.types import Message
 from pyrogram.enums import ParseMode
-import logging
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,7 +18,7 @@ API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", "8080"))
 
-# Debug: Check if variables are loaded (this will show in Render logs)
+# Debug: Check if variables are loaded
 logger.info("🔧 Loading environment variables...")
 logger.info(f"API_ID: {API_ID}")
 logger.info(f"API_HASH: {API_HASH}")
@@ -49,27 +50,25 @@ app = Client(
 # Simple storage
 user_data = {}
 
-# Web server for Render health checks
-async def health_check(request):
-    return web.Response(text="Bot is running!")
+# Simple HTTP server for health checks
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ['/', '/health']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot is running!')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        logger.info(f"HTTP {format % args}")
 
-async def start_web_server():
-    """Start a simple web server for Render"""
-    try:
-        web_app = web.Application()
-        web_app.router.add_get('/', health_check)
-        web_app.router.add_get('/health', health_check)
-        
-        runner = web.AppRunner(web_app)
-        await runner.setup()
-        
-        site = web.TCPSite(runner, '0.0.0.0', PORT)
-        await site.start()
-        logger.info(f"🌐 Web server running on port {PORT}")
-        return True
-    except Exception as e:
-        logger.error(f"Web server error: {e}")
-        return False
+def run_http_server():
+    server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
+    logger.info(f"🌐 Web server running on port {PORT}")
+    server.serve_forever()
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message: Message):
@@ -275,11 +274,10 @@ async def main():
     logger.info("🚀 Starting Fast File Bot...")
     
     try:
-        # Start web server for Render
-        web_server_started = await start_web_server()
-        if not web_server_started:
-            logger.error("❌ Failed to start web server")
-            return
+        # Start HTTP server in a separate thread
+        http_thread = threading.Thread(target=run_http_server, daemon=True)
+        http_thread.start()
+        logger.info("✅ HTTP server started")
         
         # Start Telegram bot
         await app.start()
