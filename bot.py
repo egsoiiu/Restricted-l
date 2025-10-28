@@ -4,23 +4,18 @@ import logging
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
 from urllib.parse import urlparse
-from dotenv import load_dotenv
-from aiohttp import web
-import json
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('telegram_forward_bot.log'),
         logging.StreamHandler()
     ]
 )
 
 class TelegramForwardBot:
     def __init__(self):
-        load_dotenv()
         self.validate_environment()
         
         self.api_id = int(os.getenv('API_ID'))
@@ -263,58 +258,20 @@ The bot will forward all media files between the first and last URLs to the spec
             """
             await event.reply(help_text)
 
-    async def start_web_server(self):
-        """Start simple web server on port 8080"""
-        async def health_check(request):
-            """Health check endpoint"""
-            return web.json_response({
-                "status": "running", 
-                "service": "Telegram Forward Bot",
-                "timestamp": str(asyncio.get_event_loop().time())
-            })
-
-        async def bot_info(request):
-            """Bot information endpoint"""
-            me = await self.client.get_me()
-            return web.json_response({
-                "bot_username": f"@{me.username}",
-                "bot_id": me.id,
-                "status": "online"
-            })
-
-        app = web.Application()
-        app.router.add_get('/', health_check)
-        app.router.add_get('/health', health_check)
-        app.router.add_get('/info', bot_info)
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
-        await site.start()
-        
-        logging.info("🌐 Web server started on port 8080")
-        return runner
-
     async def run(self):
-        """Run the bot with web server"""
-        if not await self.initialize():
+        """Run the bot"""
+        if not await bot.initialize():
             return
 
         # Setup message handlers
-        await self.handle_telegram_messages()
-        
-        # Start web server
-        runner = await self.start_web_server()
+        await bot.handle_telegram_messages()
 
         logging.info("🤖 Bot is now running! Send /start to see commands.")
-        logging.info("🌐 Web server: http://0.0.0.0:8080")
 
         try:
-            # Keep both Telegram client and web server running
-            await self.client.run_until_disconnected()
-        finally:
-            # Cleanup
-            await runner.cleanup()
+            await bot.client.run_until_disconnected()
+        except KeyboardInterrupt:
+            logging.info("🛑 Received interrupt signal")
 
     async def close(self):
         """Clean shutdown"""
@@ -322,26 +279,22 @@ The bot will forward all media files between the first and last URLs to the spec
             await self.client.disconnect()
         logging.info("🔚 Bot shutdown completed")
 
+# Global bot instance
+bot = TelegramForwardBot()
+
 async def main():
-    bot = TelegramForwardBot()
     try:
-        await bot.run()
-    except KeyboardInterrupt:
-        logging.info("🛑 Received interrupt signal")
+        if not await bot.initialize():
+            return
+
+        await bot.handle_telegram_messages()
+        logging.info("🤖 Bot is now running! Send /start to see commands.")
+        await bot.client.run_until_disconnected()
+        
     except Exception as e:
         logging.error(f"❌ Fatal error: {e}")
     finally:
         await bot.close()
 
 if __name__ == "__main__":
-    # Create .env file if it doesn't exist
-    if not os.path.exists('.env'):
-        with open('.env', 'w') as f:
-            f.write("""# Telegram API Credentials
-API_ID=your_api_id_here
-API_HASH=your_api_hash_here
-BOT_TOKEN=your_bot_token_here
-""")
-        print("⚠️  Created .env file. Please fill in your credentials.")
-    else:
-        asyncio.run(main())
+    asyncio.run(main())
