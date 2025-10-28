@@ -14,14 +14,12 @@ logger = logging.getLogger(__name__)
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.getenv("PORT", "8080"))
 
 # Debug: Check if variables are loaded
 logger.info("🔧 Loading environment variables...")
 logger.info(f"API_ID: {API_ID}")
 logger.info(f"API_HASH: {API_HASH}")
 logger.info(f"BOT_TOKEN: {BOT_TOKEN}")
-logger.info(f"PORT: {PORT}")
 
 # Validate credentials
 if not all([API_ID, API_HASH, BOT_TOKEN]):
@@ -47,25 +45,6 @@ app = Client(
 
 # Simple storage
 user_data = {}
-
-# Simple async web server for health checks
-async def handle_health_check(request):
-    return web.Response(text="Bot is running!")
-
-async def start_web_server():
-    """Start a simple web server for Render"""
-    from aiohttp import web
-    
-    web_app = web.Application()
-    web_app.router.add_get('/', handle_health_check)
-    web_app.router.add_get('/health', handle_health_check)
-    
-    runner = web.AppRunner(web_app)
-    await runner.setup()
-    
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
-    logger.info(f"🌐 Web server running on port {PORT}")
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message: Message):
@@ -100,6 +79,7 @@ async def test_command(client, message: Message):
 async def ping_command(client, message: Message):
     """Simple ping command"""
     try:
+        import time
         start_time = time.time()
         msg = await message.reply_text("🏓 Pong!")
         end_time = time.time()
@@ -282,13 +262,10 @@ async def handle_all_text(client, message: Message):
         logger.error(f"❌ Error in text handler: {e}")
 
 async def main():
-    """Start both web server and Telegram bot"""
+    """Start the Telegram bot"""
     logger.info("🚀 Starting Fast File Bot...")
     
     try:
-        # Start web server for Render (using aiohttp)
-        await start_web_server()
-        
         # Start Telegram bot
         await app.start()
         logger.info("✅ Bot started successfully!")
@@ -315,6 +292,4 @@ async def main():
         logger.info("🛑 Bot stopped")
 
 if __name__ == "__main__":
-    # Import time for ping command
-    import time
     asyncio.run(main())
